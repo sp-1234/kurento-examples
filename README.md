@@ -1,0 +1,2 @@
+Fork of kurento one-to-many tutorial https://github.com/Kurento/kurento-tutorial-java/tree/master/kurento-one2many-call  
+Added support for multiple broadcast sessions at the same time, and changed from maven+java to gradle+kotlin for ergonomic reasons.

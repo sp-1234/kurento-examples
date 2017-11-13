@@ -56,6 +56,7 @@ class CallHandler : TextWebSocketHandler() {
             val messageKind = jsonMessage["kind"].asString
             when (messageKind) {
                 "presenter" -> presenter(ws, jsonMessage)
+                "presenterSDPAnswer" -> onPresenterSDPAnswer(ws, jsonMessage["sdp"].asString)
 
                 "viewer" -> viewer(ws, jsonMessage)
 
@@ -112,29 +113,28 @@ class CallHandler : TextWebSocketHandler() {
         val presenterWebRTCEndpoint = WebRtcEndpoint.Builder(stream.pipeline).build()
         stream.presenter.webRtcEndpoint = presenterWebRTCEndpoint
 
-        presenterWebRTCEndpoint.addIceCandidateFoundListener { event ->
-            val candidate = event.candidate
-            synchronized(ws) {
-                ws.sendMessage(JsonObject().apply {
-                    addProperty("kind", "iceCandidate")
-                    add("candidate", JsonUtils.toJsonObject(candidate))
-                })
-            }
-        }
-
-        val sdpOffer = jsonMessage.getAsJsonPrimitive("sdpOffer").asString
-        presenterWebRTCEndpoint.processOffer(sdpOffer, simpleContinuation({ sdpAnswer ->
-            ws.sendMessage(JsonObject().apply {
-                addProperty("kind", "presenterResponse")
-                addProperty("response", "accepted")
-                addProperty("sdpAnswer", sdpAnswer)
+        presenterWebRTCEndpoint.gatherCandidates(simpleContinuation {
+            presenterWebRTCEndpoint.generateOffer(simpleContinuation { offer: String ->
+                synchronized(ws) {
+                    ws.sendMessage(JsonObject().apply {
+                        addProperty("kind", "presenterResponse")
+                        addProperty("response", "accepted")
+                        addProperty("sdpOffer", offer)
+                    })
+                }
             })
-            presenterWebRTCEndpoint.gatherCandidates()
-        }))
+        })
     }
 
     @Synchronized
-    @Throws(IOException::class)
+    private fun onPresenterSDPAnswer(ws: WebSocketSession, sdpAnswer: String) {
+        val streamKey = streamsByWs[ws.id]
+        val stream = streams[streamKey]!!
+        val presenterWebRTCEndpoint = stream.presenter.webRtcEndpoint!!
+        presenterWebRTCEndpoint.processAnswer(sdpAnswer, simpleContinuation { })
+    }
+
+    @Synchronized
     private fun viewer(ws: WebSocketSession, jsonMessage: JsonObject) {
         val streamId = jsonMessage["streamId"].asString
         val stream = streams[streamId]

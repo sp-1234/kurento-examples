@@ -33,18 +33,40 @@ function presenter() {
     if (!webRtcPeer) {
         var options = {
             localVideo : video,
-            onicecandidate : onIceCandidate
+            oncandidategatheringdone: onPresenterIceDone
         }
         webRtcPeer = new kurentoUtils.WebRtcPeer.WebRtcPeerSendonly(options,
                 function(error) {
                     if (error) {
                         return console.error(error);
                     }
-                    webRtcPeer.generateOffer(onOffer('presenter'));
                 });
-
         enableStopButton();
+        sendPresenterHello();
     }
+}
+
+function sendPresenterHello() {
+    sendMessage({
+        kind: 'presenter',
+        streamId: getStreamId()
+    });
+}
+
+function onPresenterIceDone() {
+    console.log("onPresenterIceDone");
+    var sdpAnswer = webRtcPeer.getLocalSessionDescriptor().sdp;
+    sendMessage({
+        kind: 'presenterSDPAnswer',
+        sdp: sdpAnswer
+    });
+}
+
+function presenterResponse(m) {
+    console.log("presenterResponse " + m);
+    webRtcPeer.processOffer(m.sdpOffer, function(error, answer) {
+        console.log("processOffer error = " + error);
+    });
 }
 
 function viewer() {
@@ -89,6 +111,8 @@ ws.onmessage = function(message) {
 
     switch (parsedMessage.kind) {
         case 'presenterResponse':
+            presenterResponse(parsedMessage);
+            break;
         case 'viewerResponse':
             response(parsedMessage);
             break;
